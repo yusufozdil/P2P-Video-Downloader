@@ -1,0 +1,29 @@
+version: '3'
+services:
+  peer1:
+    build: .
+    networks:
+      - p2p-net
+    volumes:
+      - ./data/peer1:/data
+    command: ["java", "-jar", "app.jar", "--headless"]
+    
+  peer2:
+    build: .
+    networks:
+      - p2p-net
+    volumes:
+      - ./data/peer2:/data
+    command: ["java", "-jar", "app.jar", "--headless"]
+
+  peer3:
+    build: .
+    networks:
+      - p2p-net
+    volumes:
+      - ./data/peer3:/data
+    command: ["java", "-jar", "app.jar", "--headless"]
+
+networks:
+  p2p-net:
+    driver: bridge
