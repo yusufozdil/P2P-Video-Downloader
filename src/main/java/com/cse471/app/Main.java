@@ -8,17 +8,26 @@ import javax.swing.*;
 public class Main {
     public static void main(String[] args) {
         boolean headless = false;
+        boolean botMode = false;
+
         for (String arg : args) {
             if (arg.equals("--headless")) {
                 headless = true;
-                break;
+            } else if (arg.equals("--bot")) {
+                botMode = true;
+                headless = true;
             }
         }
 
         if (headless) {
             System.out.println("Starting in Headless Mode...");
-            com.cse471.app.AppController.getInstance().initialize(null);
-            com.cse471.app.AppController.getInstance().startNetwork();
+            com.cse471.app.AppController controller = com.cse471.app.AppController.getInstance();
+            controller.initialize(null);
+            controller.startNetwork();
+
+            if (botMode) {
+                new com.cse471.app.BotManager(controller).start();
+            }
 
             // Keep alive
             try {

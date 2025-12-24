@@ -75,70 +75,70 @@ public class DiscoveryManager {
         byte[] data = packet.getData();
         int length = packet.getLength();
 
-        if (length < 4)
-            return; // Too short
+        if (length < 8) // Min header size increased: Flags(1) + TTL(1) + Port(2) + IP(4)
+            return;
 
-        // Parsing Protocol: [Flags (1)] [TTL (1)] [Port (2)] [PeerID (Var)]
-        // byte flags = data[0]; // Currently unused
+        // Parsing Protocol: [Flags (1)] [TTL (1)] [Port (2)] [IP (4)] [PeerID (Var)]
         int ttl = data[1] & 0xFF;
         int remotePort = ((data[2] & 0xFF) << 8) | (data[3] & 0xFF);
 
-        String remoteId = new String(data, 4, length - 4, StandardCharsets.UTF_8);
+        // Extract IP from payload (Bytes 4,5,6,7)
+        byte[] ipBytes = new byte[4];
+        System.arraycopy(data, 4, ipBytes, 0, 4);
+
+        InetAddress remoteAddress;
+        try {
+            remoteAddress = InetAddress.getByAddress(ipBytes);
+        } catch (UnknownHostException e) {
+            return; // Invalid IP
+        }
+
+        String remoteId = new String(data, 8, length - 8, StandardCharsets.UTF_8);
 
         // Ignore self
         if (remoteId.equals(myPeerId))
             return;
 
-        // Register Peer
-        PeerInfo info = new PeerInfo(remoteId, packet.getAddress(), remotePort);
-        PeerManager.getInstance().addPeer(info);
+        // Register Peer using the IP from payload (True Origin), not packet sender
+        // (Forwarder)
+        PeerInfo info = new PeerInfo(remoteId, remoteAddress, remotePort);
+        if (PeerManager.getInstance().addPeer(info)) {
+            System.out.println(
+                    "Discovered Peer: " + remoteId + " at " + remoteAddress.getHostAddress() + ":" + remotePort);
+        }
 
         // Forwarding Logic (Limited Scope Flooding)
         if (ttl > 0) {
-            // Decrement TTL and Forward
-            // NOTE: In a real mesh, we would re-broadcast.
-            // But doing a naive re-broadcast on the same broadcast domain (LAN)
-            // creates a storm. We assume this logic is for "bridging" or just demonstrating
-            // TTL.
-            // For this project, to avoid infinite loops on localhost, we might want to be
-            // careful.
-            // Requirement says: "P2P nodes should be able to UDP flood... implement limited
-            // scope flooding."
+            // Re-broadcast the EXACT same payload (preserving original IP/Port/ID), just
+            // decrementing TTL is tricky
+            // because we need to rebuild payload if we change TTL.
+            // For simplicity in this project: We will construct a NEW payload with the SAME
+            // Origin IP.
+            // But wait, buildPayload uses "myPeerId". We need a "forwardPayload" method or
+            // modify existing.
+            // Actually, for true flooding, we should just rebroadcast the received byte
+            // array but with TTL-1.
 
-            // To be safe and compliant: We only forward if we haven't seen this "Packet"
-            // before?
-            // But we don't have unique packet IDs.
-            // Simple approach: Just decrement and send, but maybe limit frequency or check
-            // if we already have the peer.
-            // If we already knew the peer, maybe we don't need to flood again?
+            // Let's modify the buffer directly to decrement TTL and forward
+            data[1] = (byte) (ttl - 1);
 
-            // For now, let's strictly follow the TTL rule:
-            // sendDiscoveryPacket(..., ttl - 1, ...);
-            // However, since everyone is on valid broadcast IP, re-sending receiving packet
-            // puts it back on wire.
-            // We need a separate socket for sending to avoid binding conflict?
-            // No, the serverSocket is bound to port 50000 key. We can't send FROM 50000
-            // easily if bound?
-            // Actually we can using the same socket.
-
-            // Logic disabled to prevent local broadcast storm in single-subnet/localhost
-            // simulation
-            // unless explicit requirement enforces it.
-            // Implementation:
-            forwardDiscovery(ttl - 1, remotePort, remoteId);
+            // We must send only the valid length
+            forwardPacket(data, length);
         }
     }
 
     private void sendDiscovery(DatagramSocket socket, int ttl) {
-        byte[] payload = buildPayload(ttl, myTcpPort, myPeerId);
-
         try {
-            // Try global broadcast first (works on some systems)
-            // InetAddress globalBroadcast = InetAddress.getByName("255.255.255.255");
-            // socket.send(new DatagramPacket(payload, payload.length, globalBroadcast,
-            // DISCOVERY_PORT));
+            // We need to send OUR IP. In Docker with multiple interfaces, this is tricky.
+            // But usually InetAddress.getLocalHost() works or we iterate interfaces.
+            // For simplicity, we'll try to get a valid site-local address.
+            InetAddress myIp = getLocalIpAddress();
+            if (myIp == null)
+                return;
 
-            // Iterate over all interfaces and send to their broadcast addresses
+            byte[] payload = buildPayload(ttl, myTcpPort, myIp, myPeerId);
+
+            // Broadcast Logic (Same as before)
             java.util.Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
             while (interfaces.hasMoreElements()) {
                 NetworkInterface networkInterface = interfaces.nextElement();
@@ -153,7 +153,6 @@ public class DiscoveryManager {
                                     DISCOVERY_PORT);
                             socket.send(packet);
                         } catch (Exception ignored) {
-                            // Some interfaces might fail, ignore and continue
                         }
                     }
                 }
@@ -166,7 +165,8 @@ public class DiscoveryManager {
     private void forwardDiscovery(int ttl, int tcpPort, String peerId) {
         try (DatagramSocket socket = new DatagramSocket()) {
             socket.setBroadcast(true);
-            byte[] payload = buildPayload(ttl, tcpPort, peerId);
+            byte[] payload = buildPayload(ttl, tcpPort, InetAddress.getByName("0.0.0.0"), peerId); // Placeholder IP for
+                                                                                                   // old method
             InetAddress broadcast = InetAddress.getByName("255.255.255.255");
             DatagramPacket packet = new DatagramPacket(payload, payload.length, broadcast, DISCOVERY_PORT);
             socket.send(packet);
@@ -177,16 +177,51 @@ public class DiscoveryManager {
         }
     }
 
-    private byte[] buildPayload(int ttl, int port, String id) {
-        byte[] idBytes = id.getBytes(StandardCharsets.UTF_8);
-        byte[] payload = new byte[4 + idBytes.length];
+    // New helper to forward existing data
+    private void forwardPacket(byte[] data, int length) {
+        try (DatagramSocket socket = new DatagramSocket()) {
+            socket.setBroadcast(true);
+            InetAddress broadcast = InetAddress.getByName("255.255.255.255");
+            DatagramPacket packet = new DatagramPacket(data, length, broadcast, DISCOVERY_PORT);
+            socket.send(packet);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
 
-        payload[0] = 0x01; // Flags (Broadcast)
+    private byte[] buildPayload(int ttl, int port, InetAddress ip, String id) {
+        byte[] idBytes = id.getBytes(StandardCharsets.UTF_8);
+        byte[] ipBytes = ip.getAddress(); // 4 bytes for IPv4
+
+        byte[] payload = new byte[8 + idBytes.length]; // 1+1+2+4 + ID
+
+        payload[0] = 0x01; // Flags
         payload[1] = (byte) ttl;
         payload[2] = (byte) ((port >> 8) & 0xFF);
         payload[3] = (byte) (port & 0xFF);
-        System.arraycopy(idBytes, 0, payload, 4, idBytes.length);
+        System.arraycopy(ipBytes, 0, payload, 4, 4); // Put IP
+        System.arraycopy(idBytes, 0, payload, 8, idBytes.length);
 
         return payload;
+    }
+
+    private InetAddress getLocalIpAddress() {
+        try {
+            java.util.Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
+            while (interfaces.hasMoreElements()) {
+                NetworkInterface iface = interfaces.nextElement();
+                if (iface.isLoopback() || !iface.isUp())
+                    continue;
+
+                for (InterfaceAddress addr : iface.getInterfaceAddresses()) {
+                    InetAddress ip = addr.getAddress();
+                    if (ip instanceof Inet4Address) {
+                        return ip;
+                    }
+                }
+            }
+        } catch (Exception e) {
+        }
+        return null;
     }
 }

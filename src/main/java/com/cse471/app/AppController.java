@@ -42,6 +42,7 @@ public class AppController {
             File defaultRoot = new File("/data");
             if (defaultRoot.exists()) {
                 setRootFolder(defaultRoot);
+                fileManager.setBufferFolder(new File(defaultRoot, "downloads"));
                 System.out.println("Headless Mode: Root folder set to /data");
             }
         }
@@ -131,11 +132,43 @@ public class AppController {
                 }
             });
         }).start();
+
+    }
+
+    public java.util.List<FileInfo> searchFilesBlocking(String query) {
+        if (transferManager == null)
+            return new java.util.ArrayList<>();
+
+        java.util.LinkedHashMap<String, FileInfo> uniqueFiles = new java.util.LinkedHashMap<>();
+
+        // 1. Local Files
+        fileManager.getLocalFileList().stream()
+                .filter(f -> f.getFileName().toLowerCase().contains(query.toLowerCase()))
+                .forEach(f -> uniqueFiles.put(f.getHash(), f));
+
+        // 2. Remote Files
+        for (com.cse471.network.PeerInfo peer : com.cse471.network.PeerManager.getInstance().getAllPeers()) {
+            java.util.List<FileInfo> remoteFiles = transferManager.requestFileList(peer);
+            if (remoteFiles != null) {
+                remoteFiles.stream()
+                        .filter(f -> f.getFileName().toLowerCase().contains(query.toLowerCase()))
+                        .forEach(f -> uniqueFiles.putIfAbsent(f.getHash(), f));
+            }
+        }
+        return new java.util.ArrayList<>(uniqueFiles.values());
     }
 
     public void playVideo(FileInfo fileInfo) {
+        startDownload(fileInfo, true);
+    }
+
+    public void startDownload(FileInfo fileInfo, boolean playVideo) {
         if (transferManager == null || fileManager.getBufferFolder() == null) {
-            JOptionPane.showMessageDialog(mainFrame, "Network not started or Buffer Folder not set.");
+            String msg = "Network not started or Buffer Folder not set.";
+            if (mainFrame != null)
+                JOptionPane.showMessageDialog(mainFrame, msg);
+            else
+                System.err.println(msg);
             return;
         }
 
@@ -146,17 +179,17 @@ public class AppController {
                 java.util.List<com.cse471.network.PeerInfo> sources = new java.util.ArrayList<>();
                 for (com.cse471.network.PeerInfo peer : com.cse471.network.PeerManager.getInstance().getAllPeers()) {
                     java.util.List<FileInfo> files = transferManager.requestFileList(peer);
-                    if (files.stream().anyMatch(f -> f.getHash().equals(fileInfo.getHash()))) {
+                    if (files != null && files.stream().anyMatch(f -> f.getHash().equals(fileInfo.getHash()))) {
                         sources.add(peer);
                     }
                 }
 
                 if (sources.isEmpty()) {
+                    String msg = "No sources found for file: " + fileInfo.getFileName();
                     if (mainFrame != null) {
-                        SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(mainFrame,
-                                "No sources found for file: " + fileInfo.getFileName()));
+                        SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(mainFrame, msg));
                     } else {
-                        System.out.println("No sources found for file: " + fileInfo.getFileName());
+                        System.out.println(msg);
                     }
                     return;
                 }
@@ -165,14 +198,15 @@ public class AppController {
                 int totalChunks = fileInfo.getTotalChunks(256 * 1024);
 
                 if (mainFrame != null) {
-                    SwingUtilities.invokeLater(() -> mainFrame
-                            .addActiveStream("Starting: " + fileInfo.getFileName() + " (" + totalChunks + " chunks)"));
+                    SwingUtilities.invokeLater(() -> {
+                        mainFrame.log("Starting download: " + fileInfo.getFileName());
+                        mainFrame.addActiveStream(fileInfo.getFileName(), "Finding Sources...", "0%", "Starting");
+                    });
+                } else {
+                    System.out.println("Bot: Starting download -> " + fileInfo.getFileName());
                 }
 
                 // 2. Playback Trigger
-                // Dynamic Buffering (Bonus)
-                // Start conservatively (4 chunks ~ 1MB).
-                // If download is slow ( > 500ms per chunk), increase buffer requirement.
                 int bufferNeeded = 4;
                 long startTime = System.currentTimeMillis();
 
@@ -193,22 +227,28 @@ public class AppController {
                     if (data != null && data.length > 0) {
                         fileManager.writeChunk(fileInfo.getFileName(), i, data);
 
-                        final int currentChunk = i;
                         if (mainFrame != null) {
-                            SwingUtilities
-                                    .invokeLater(() -> mainFrame.addActiveStream("Downloaded Chunk " + currentChunk
-                                            + " from " + source.getId() + " (" + duration + "ms)"));
+                            final int currentChunk = i;
+                            final int total = totalChunks;
+                            SwingUtilities.invokeLater(() -> {
+                                // Calculate percentage
+                                int percent = (int) ((currentChunk + 1) * 100.0 / total);
+                                mainFrame.addActiveStream(fileInfo.getFileName(), source.getId(),
+                                        percent + "% (Chunk " + currentChunk + ")", "Downloading");
+                            });
 
-                            // Start Player if buffered enough
-                            if (i == bufferNeeded) {
+                            // Start Player if buffered enough AND playVideo is requested
+                            if (playVideo && i == bufferNeeded) {
                                 SwingUtilities.invokeLater(() -> {
                                     mainFrame.getStreamPlayer().play(targetFile.getAbsolutePath());
-                                    mainFrame.addActiveStream(
-                                            ">>> Playing: " + fileInfo.getFileName() + " (Buffer reached "
-                                                    + currentChunk
-                                                    + ")");
+                                    mainFrame.log(">>> Starting Playback: " + fileInfo.getFileName());
+                                    mainFrame.addActiveStream(fileInfo.getFileName(), "Local Player", "Buffer Ready",
+                                            "Playing");
                                 });
                             }
+                        } else {
+                            // Headless Log
+                            System.out.println("Bot: Downloaded Chunk " + i + " from " + source.getId());
                         }
                     } else {
                         System.err.println("Failed to download chunk " + i);
@@ -216,9 +256,12 @@ public class AppController {
                 }
 
                 if (mainFrame != null) {
-                    SwingUtilities
-                            .invokeLater(
-                                    () -> mainFrame.addActiveStream("Download Complete: " + fileInfo.getFileName()));
+                    SwingUtilities.invokeLater(() -> {
+                        mainFrame.log("Download Complete: " + fileInfo.getFileName());
+                        mainFrame.addActiveStream(fileInfo.getFileName(), "All Sources", "100%", "Completed");
+                    });
+                } else {
+                    System.out.println("Bot: Download Complete -> " + fileInfo.getFileName());
                 }
 
             } catch (Exception e) {

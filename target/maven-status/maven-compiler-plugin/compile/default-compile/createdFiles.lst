@@ -1,12 +1,13 @@
-com/cse471/network/PeerInfo.class
 com/cse471/network/PeerManager.class
 com/cse471/gui/MainFrame.class
 com/cse471/app/Main.class
 com/cse471/gui/MainFrame$1.class
+com/cse471/app/AppController.class
+com/cse471/file/FileManager.class
+com/cse471/player/StreamPlayer.class
+com/cse471/network/PeerInfo.class
+com/cse471/app/BotManager.class
 com/cse471/network/DiscoveryManager.class
 com/cse471/file/FileInfo.class
 com/cse471/player/StreamPlayer$1.class
-com/cse471/app/AppController.class
-com/cse471/file/FileManager.class
 com/cse471/network/TransferManager.class
-com/cse471/player/StreamPlayer.class

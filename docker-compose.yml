@@ -6,15 +6,15 @@ services:
       - p2p-net
     volumes:
       - ./data/peer1:/data
-    command: ["java", "-jar", "app.jar", "--headless"]
-    
+    command: [ "java", "-jar", "app.jar", "--headless" ]
+
   peer2:
     build: .
     networks:
       - p2p-net
     volumes:
       - ./data/peer2:/data
-    command: ["java", "-jar", "app.jar", "--headless"]
+    command: [ "java", "-jar", "app.jar", "--headless" ]
 
   peer3:
     build: .
@@ -22,7 +22,7 @@ services:
       - p2p-net
     volumes:
       - ./data/peer3:/data
-    command: ["java", "-jar", "app.jar", "--headless"]
+    command: [ "java", "-jar", "app.jar", "--bot" ]
 
 networks:
   p2p-net:

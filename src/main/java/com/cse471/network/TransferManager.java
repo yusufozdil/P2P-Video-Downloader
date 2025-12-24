@@ -6,6 +6,7 @@ import com.cse471.file.FileManager;
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.InetAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
@@ -38,7 +39,7 @@ public class TransferManager {
     }
 
     private void listenLoop() {
-        try (ServerSocket serverSocket = new ServerSocket(port)) {
+        try (ServerSocket serverSocket = new ServerSocket(port, 50, InetAddress.getByName("0.0.0.0"))) {
             while (running) {
                 Socket client = serverSocket.accept();
                 new Thread(() -> handleClient(client)).start();
@@ -119,7 +120,8 @@ public class TransferManager {
             }
 
         } catch (IOException e) {
-            // e.printStackTrace();
+            System.err.println("RequestFileList failed to " + peer.getId() + ": " + e.getMessage());
+            e.printStackTrace();
         }
         return result;
     }

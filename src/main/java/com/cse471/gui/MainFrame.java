@@ -17,10 +17,15 @@ public class MainFrame extends JFrame {
     private JTextField searchField;
     private JButton searchButton;
     private JList<FileInfo> availableList;
-    private JList<String> activeStreamsList;
+    private JTable activeStreamsTable;
     private DefaultListModel<FileInfo> availableListModel;
-    private DefaultListModel<String> activeStreamsModel;
+    private javax.swing.table.DefaultTableModel activeStreamsModel;
     private com.cse471.player.StreamPlayer streamPlayer;
+    private JTextArea eventLog;
+    private JLabel statusLabel;
+
+    // Theme
+    private boolean isDarkTheme = true;
 
     public MainFrame() {
         initUI();
@@ -31,14 +36,22 @@ public class MainFrame extends JFrame {
     }
 
     private void initUI() {
+        // Apply Initial Theme
+        try {
+            UIManager.setLookAndFeel(new FlatDarkLaf());
+        } catch (Exception ex) {
+            System.err.println("Failed to initialize LaF");
+        }
+
         setTitle("P2P Video Streaming - CSE471");
-        setSize(1000, 700);
+        setSize(1200, 800);
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
 
         // Menu
         JMenuBar menuBar = new JMenuBar();
         JMenu streamMenu = new JMenu("Stream");
+        JMenu viewMenu = new JMenu("View");
         JMenu helpMenu = new JMenu("Help");
 
         connectItem = new JMenuItem("Connect");
@@ -52,63 +65,139 @@ public class MainFrame extends JFrame {
         streamMenu.add(setRootItem);
         streamMenu.add(setBufferItem);
 
-        helpMenu.add(new JMenuItem("About Developer"));
+        JMenuItem toggleThemeItem = new JMenuItem("Toggle Theme (Dark/Light)");
+        viewMenu.add(toggleThemeItem);
+
+        JMenuItem aboutItem = new JMenuItem("About Developer");
+        helpMenu.add(aboutItem);
 
         menuBar.add(streamMenu);
+        menuBar.add(viewMenu);
         menuBar.add(helpMenu);
         setJMenuBar(menuBar);
 
-        // Layout
+        // -- Actions --
+
+        // Theme Action
+        toggleThemeItem.addActionListener(e -> {
+            isDarkTheme = !isDarkTheme;
+            try {
+                if (isDarkTheme) {
+                    UIManager.setLookAndFeel(new FlatDarkLaf());
+                } else {
+                    UIManager.setLookAndFeel(new com.formdev.flatlaf.FlatLightLaf());
+                }
+                SwingUtilities.updateComponentTreeUI(this);
+            } catch (Exception ex) {
+                ex.printStackTrace();
+            }
+        });
+
+        // About Action
+        aboutItem.addActionListener(e -> {
+            JOptionPane.showMessageDialog(this,
+                    "Developer: Yusuf Özdil\nContact: yusuf.ozdil@std.yeditepe.edu.tr",
+                    "About Developer",
+                    JOptionPane.INFORMATION_MESSAGE);
+        });
+
+        // -- Layout Construction --
         setLayout(new BorderLayout());
 
-        // Top Panel: Search
-        JPanel topPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        searchField = new JTextField(30);
+        // 1. Status Panel (Top)
+        JPanel statusPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        statusLabel = new JLabel("Status: DISCONNECTED | Root: Not Set | Buffer: Not Set");
+        statusPanel.add(statusLabel);
+        statusPanel.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, Color.GRAY));
+        add(statusPanel, BorderLayout.NORTH);
+
+        // 2. Main Split Pane (Left vs Right)
+
+        // Left Panel: Search + Available List
+        JPanel leftPanel = new JPanel(new BorderLayout());
+
+        JPanel searchPanel = new JPanel(new GridBagLayout());
+        searchPanel.setBorder(BorderFactory.createTitledBorder("Search Videos"));
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.insets = new Insets(5, 5, 5, 5);
+
+        searchField = new JTextField();
         searchButton = new JButton("Search");
-        topPanel.add(new JLabel("Search File:"));
-        topPanel.add(searchField);
-        topPanel.add(searchButton);
-        add(topPanel, BorderLayout.NORTH);
 
-        // Center Split: Left (Network Files), Center (Player Placeholder), Right
-        // (Active Streams)
+        gbc.gridx = 0;
+        gbc.gridy = 0;
+        gbc.weightx = 1.0;
+        searchPanel.add(searchField, gbc);
 
-        // Left: Available Videos
+        gbc.gridx = 1;
+        gbc.gridy = 0;
+        gbc.weightx = 0.0;
+        searchPanel.add(searchButton, gbc);
+
         availableListModel = new DefaultListModel<>();
         availableList = new JList<>(availableListModel);
-        JScrollPane leftScroll = new JScrollPane(availableList);
-        leftScroll.setBorder(BorderFactory.createTitledBorder("Available Videos on Network"));
-        leftScroll.setPreferredSize(new Dimension(250, 0));
+        JScrollPane listScroll = new JScrollPane(availableList);
+        listScroll.setBorder(BorderFactory.createTitledBorder("Available Videos in Network"));
 
-        // Right (or Bottom): Active Streams
-        activeStreamsModel = new DefaultListModel<>();
-        activeStreamsList = new JList<>(activeStreamsModel);
-        JScrollPane rightScroll = new JScrollPane(activeStreamsList);
-        rightScroll.setBorder(BorderFactory.createTitledBorder("Active Streams"));
-        rightScroll.setPreferredSize(new Dimension(250, 0));
+        leftPanel.add(searchPanel, BorderLayout.NORTH);
+        leftPanel.add(listScroll, BorderLayout.CENTER);
+        leftPanel.setPreferredSize(new Dimension(300, 0));
 
-        // Center: Player
+        // Right Panel: Active Streams (Top) + Video Player (Center)
+        // We use a Vertical Split Pane
+
+        // Active Streams Table
+        String[] columnNames = { "Video", "Source Peer", "Progress %", "Status" };
+        activeStreamsModel = new javax.swing.table.DefaultTableModel(columnNames, 0);
+        activeStreamsTable = new JTable(activeStreamsModel);
+        JScrollPane tableScroll = new JScrollPane(activeStreamsTable);
+        tableScroll.setBorder(BorderFactory.createTitledBorder("Active Streams"));
+        tableScroll.setPreferredSize(new Dimension(0, 150)); // Fixed height for table
+
+        // Video Player
         streamPlayer = new com.cse471.player.StreamPlayer();
-        streamPlayer.setBorder(BorderFactory.createTitledBorder("Video Player"));
+        streamPlayer.setBorder(BorderFactory.createTitledBorder("Video Player")); // Clean border
 
-        // Main Split
-        JSplitPane rightSplit = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, streamPlayer, rightScroll);
-        rightSplit.setResizeWeight(0.8);
+        JSplitPane rightSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT, tableScroll, streamPlayer);
+        rightSplit.setResizeWeight(0.3); // Table gets 30%, Player gets 70%
+        rightSplit.setDividerLocation(200);
 
-        JSplitPane mainSplit = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, leftScroll, rightSplit);
-        mainSplit.setResizeWeight(0.2);
+        // Combine Left and Right
+        JSplitPane mainSplit = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, leftPanel, rightSplit);
+        mainSplit.setResizeWeight(0.25); // Left panel width ratio
+        mainSplit.setDividerLocation(300);
 
         add(mainSplit, BorderLayout.CENTER);
 
-        // Actions
-        connectItem.addActionListener(e -> com.cse471.app.AppController.getInstance().startNetwork());
-        disconnectItem.addActionListener(e -> com.cse471.app.AppController.getInstance().stopNetwork());
+        // 3. Event Log (Bottom)
+        eventLog = new JTextArea(5, 50);
+        eventLog.setEditable(false);
+        JScrollPane logScroll = new JScrollPane(eventLog);
+        logScroll.setBorder(BorderFactory.createTitledBorder("Event Log"));
+        add(logScroll, BorderLayout.SOUTH);
+
+        // -- Logic Links --
+
+        connectItem.addActionListener(e -> {
+            com.cse471.app.AppController.getInstance().startNetwork();
+            log("Network Started.");
+            updateStatusLabel("CONNECTED");
+        });
+
+        disconnectItem.addActionListener(e -> {
+            com.cse471.app.AppController.getInstance().stopNetwork();
+            log("Network Stopped.");
+            updateStatusLabel("DISCONNECTED");
+        });
 
         setRootItem.addActionListener(e -> {
             JFileChooser chooser = new JFileChooser();
             chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
             if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
                 com.cse471.app.AppController.getInstance().setRootFolder(chooser.getSelectedFile());
+                log("Root folder set: " + chooser.getSelectedFile().getAbsolutePath());
+                updateStatusLabel("CONNECTED"); // Simplified update
             }
         });
 
@@ -117,17 +206,21 @@ public class MainFrame extends JFrame {
             chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
             if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
                 com.cse471.app.AppController.getInstance().setBufferFolder(chooser.getSelectedFile());
+                log("Buffer folder set: " + chooser.getSelectedFile().getAbsolutePath());
+                updateStatusLabel("CONNECTED");
             }
         });
 
         // Initialize Controller
         com.cse471.app.AppController.getInstance().initialize(this);
+        log("Application initialized.");
 
         // Search Action
         searchButton.addActionListener(e -> {
             String q = searchField.getText().trim();
             if (!q.isEmpty()) {
                 com.cse471.app.AppController.getInstance().searchFiles(q);
+                log("Searching for: " + q);
             }
         });
     }
@@ -137,8 +230,9 @@ public class MainFrame extends JFrame {
         for (FileInfo f : files) {
             availableListModel.addElement(f);
         }
+        log("Search returned " + files.size() + " result(s).");
 
-        // Add Listener if not already (simple check or re-add)
+        // Add Listener
         for (java.awt.event.MouseListener ml : availableList.getMouseListeners()) {
             availableList.removeMouseListener(ml);
         }
@@ -147,6 +241,7 @@ public class MainFrame extends JFrame {
                 if (evt.getClickCount() == 2) {
                     FileInfo selected = availableList.getSelectedValue();
                     if (selected != null) {
+                        log("Requesting: " + selected.getFileName());
                         com.cse471.app.AppController.getInstance().playVideo(selected);
                     }
                 }
@@ -154,7 +249,21 @@ public class MainFrame extends JFrame {
         });
     }
 
-    public void addActiveStream(String status) {
-        activeStreamsModel.addElement(status);
+    // Updated for structured table data
+    public void addActiveStream(String video, String source, String progress, String status) {
+        activeStreamsModel.addRow(new Object[] { video, source, progress, status });
+        // Scroll to the bottom
+        activeStreamsTable
+                .scrollRectToVisible(activeStreamsTable.getCellRect(activeStreamsTable.getRowCount() - 1, 0, true));
+    }
+
+    public void log(String message) {
+        eventLog.append(message + "\n");
+        eventLog.setCaretPosition(eventLog.getDocument().getLength());
+    }
+
+    private void updateStatusLabel(String connectionStatus) {
+        // This would ideally pull from AppController state
+        statusLabel.setText("Status: " + connectionStatus);
     }
 }

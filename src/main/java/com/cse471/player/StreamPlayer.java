@@ -48,10 +48,32 @@ public class StreamPlayer extends JPanel {
             errorLabel.setHorizontalAlignment(SwingConstants.CENTER);
             add(errorLabel, BorderLayout.CENTER);
             e.printStackTrace();
+
         }
+
+        initControls();
     }
 
+    private void initControls() {
+        JPanel controlsPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
+        controlsPanel.setBackground(Color.DARK_GRAY);
+
+        JButton pauseButton = new JButton("Pause/Resume");
+        JButton stopButton = new JButton("Stop");
+
+        pauseButton.addActionListener(e -> pause());
+        stopButton.addActionListener(e -> stop());
+
+        controlsPanel.add(pauseButton);
+        controlsPanel.add(stopButton);
+
+        add(controlsPanel, BorderLayout.SOUTH);
+    }
+
+    private String currentFilePath;
+
     public void play(String filePath) {
+        this.currentFilePath = filePath;
         System.out.println("StreamPlayer (Software): play() called for " + filePath);
         if (mediaPlayerComponent != null) {
             boolean result = mediaPlayerComponent.mediaPlayer().media().play(filePath);
@@ -67,7 +89,13 @@ public class StreamPlayer extends JPanel {
 
     public void pause() {
         if (mediaPlayerComponent != null) {
-            mediaPlayerComponent.mediaPlayer().controls().pause();
+            var player = mediaPlayerComponent.mediaPlayer();
+            // If the video ended or stopped, restart properly
+            if (currentFilePath != null && !player.status().isPlaying() && !player.status().isPlayable()) {
+                play(currentFilePath);
+            } else {
+                player.controls().pause();
+            }
         }
     }
 

@@ -7,16 +7,17 @@ public class PeerManager {
     private static final PeerManager instance = new PeerManager();
     private final ConcurrentHashMap<String, PeerInfo> peers = new ConcurrentHashMap<>();
 
-    private PeerManager() {}
+    private PeerManager() {
+    }
 
     public static PeerManager getInstance() {
         return instance;
     }
 
-    public void addPeer(PeerInfo peer) {
+    public boolean addPeer(PeerInfo peer) {
         // Only add if not exists or update if needed
-        peers.put(peer.getId(), peer);
-        // System.out.println("Peer Discovered/Updated: " + peer);
+        PeerInfo previous = peers.put(peer.getId(), peer);
+        return previous == null;
     }
 
     public void removePeer(String peerId) {
