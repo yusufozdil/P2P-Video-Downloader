@@ -75,7 +75,7 @@ public class DiscoveryManager {
         byte[] data = packet.getData();
         int length = packet.getLength();
 
-        if (length < 8) // Min header size increased: Flags(1) + TTL(1) + Port(2) + IP(4)
+        if (length < 8)
             return;
 
         // Parsing Protocol: [Flags (1)] [TTL (1)] [Port (2)] [IP (4)] [PeerID (Var)]
@@ -99,8 +99,7 @@ public class DiscoveryManager {
         if (remoteId.equals(myPeerId))
             return;
 
-        // Register Peer using the IP from payload (True Origin), not packet sender
-        // (Forwarder)
+        // Register Peer using the IP from payload (True Origin)
         PeerInfo info = new PeerInfo(remoteId, remoteAddress, remotePort);
         if (PeerManager.getInstance().addPeer(info)) {
             System.out.println(
@@ -109,36 +108,20 @@ public class DiscoveryManager {
 
         // Forwarding Logic (Limited Scope Flooding)
         if (ttl > 0) {
-            // Re-broadcast the EXACT same payload (preserving original IP/Port/ID), just
-            // decrementing TTL is tricky
-            // because we need to rebuild payload if we change TTL.
-            // For simplicity in this project: We will construct a NEW payload with the SAME
-            // Origin IP.
-            // But wait, buildPayload uses "myPeerId". We need a "forwardPayload" method or
-            // modify existing.
-            // Actually, for true flooding, we should just rebroadcast the received byte
-            // array but with TTL-1.
-
-            // Let's modify the buffer directly to decrement TTL and forward
             data[1] = (byte) (ttl - 1);
-
-            // We must send only the valid length
             forwardPacket(data, length);
         }
     }
 
     private void sendDiscovery(DatagramSocket socket, int ttl) {
         try {
-            // We need to send OUR IP. In Docker with multiple interfaces, this is tricky.
-            // But usually InetAddress.getLocalHost() works or we iterate interfaces.
-            // For simplicity, we'll try to get a valid site-local address.
             InetAddress myIp = getLocalIpAddress();
             if (myIp == null)
                 return;
 
             byte[] payload = buildPayload(ttl, myTcpPort, myIp, myPeerId);
 
-            // Broadcast Logic (Same as before)
+            // Broadcast Logic
             java.util.Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
             while (interfaces.hasMoreElements()) {
                 NetworkInterface networkInterface = interfaces.nextElement();
@@ -162,22 +145,6 @@ public class DiscoveryManager {
         }
     }
 
-    private void forwardDiscovery(int ttl, int tcpPort, String peerId) {
-        try (DatagramSocket socket = new DatagramSocket()) {
-            socket.setBroadcast(true);
-            byte[] payload = buildPayload(ttl, tcpPort, InetAddress.getByName("0.0.0.0"), peerId); // Placeholder IP for
-                                                                                                   // old method
-            InetAddress broadcast = InetAddress.getByName("255.255.255.255");
-            DatagramPacket packet = new DatagramPacket(payload, payload.length, broadcast, DISCOVERY_PORT);
-            socket.send(packet);
-            // System.out.println("Forwarding packet from " + peerId + " (TTL=" + ttl +
-            // ")");
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
-    // New helper to forward existing data
     private void forwardPacket(byte[] data, int length) {
         try (DatagramSocket socket = new DatagramSocket()) {
             socket.setBroadcast(true);

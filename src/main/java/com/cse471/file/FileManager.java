@@ -5,7 +5,6 @@ import java.nio.file.*;
 import java.security.MessageDigest;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class FileManager {
@@ -46,10 +45,9 @@ public class FileManager {
             paths.filter(Files::isRegularFile)
                     .forEach(path -> {
                         try {
-                            // Check exclusion filter (Bonus) - Simple implementation
                             String name = path.getFileName().toString();
                             if (name.startsWith("."))
-                                return; // hidden files
+                                return;
 
                             String hash = computeSha256(path);
                             FileInfo info = new FileInfo(name, Files.size(path), hash);
@@ -78,8 +76,7 @@ public class FileManager {
         if (info == null)
             throw new FileNotFoundException("File not found in catalog");
 
-        File file = new File(rootFolder, info.getFileName()); // Assuming flat directory for simplicity
-        // Ideally we store full path or search recursively again
+        File file = new File(rootFolder, info.getFileName());
 
         try (RandomAccessFile raf = new RandomAccessFile(file, "r")) {
             long offset = (long) chunkIndex * CHUNK_SIZE;
@@ -94,10 +91,6 @@ public class FileManager {
         }
     }
 
-    // Write a chunk to buffer (for downloading) behavior
-    // This creates a sparse file initially? Or separate chunk files?
-    // Project says: "Since playback starts... reassemble all chunks".
-    // Better to write into the final file at the correct offset (RandomAccessFile).
     public synchronized void writeChunk(String fileName, int chunkIndex, byte[] data) throws IOException {
         if (bufferFolder == null)
             throw new IOException("Buffer folder not set");

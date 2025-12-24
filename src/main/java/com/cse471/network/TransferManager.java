@@ -7,7 +7,6 @@ import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.InetAddress;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -32,8 +31,6 @@ public class TransferManager {
     public void stop() {
         running = false;
         try {
-            // Dummy connection or close socket to unblock accept() if needed
-            // For now simple flag check
         } catch (Exception e) {
         }
     }
@@ -61,8 +58,6 @@ public class TransferManager {
             }
 
         } catch (IOException e) {
-            // Client disconnect or error
-            // e.printStackTrace();
         } finally {
             try {
                 socket.close();

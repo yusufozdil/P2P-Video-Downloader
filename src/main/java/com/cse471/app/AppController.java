@@ -22,8 +22,7 @@ public class AppController {
 
     private AppController() {
         this.peerId = "Peer-" + UUID.randomUUID().toString().substring(0, 8);
-        this.tcpPort = 0; // 0 = ephemeral, but we might want fixed for testing. Let's use random for now?
-        // Logic: ServerSocket(0) picks random. We need to save it.
+        this.tcpPort = 0;
     }
 
     public static synchronized AppController getInstance() {
@@ -37,7 +36,7 @@ public class AppController {
         this.mainFrame = frame;
         this.fileManager = new FileManager();
 
-        // In headless mode, default to /data directory (mounted visually in Docker)
+        // In headless mode, default to /data directory
         if (frame == null) {
             File defaultRoot = new File("/data");
             if (defaultRoot.exists()) {
@@ -87,9 +86,7 @@ public class AppController {
     public void setRootFolder(File folder) {
         if (fileManager != null) {
             fileManager.setRootFolder(folder);
-            // Update GUI list?
             if (mainFrame != null) {
-                // mainFrame.updateLocalFiles(fileManager.getLocalFileList());
             }
         }
     }

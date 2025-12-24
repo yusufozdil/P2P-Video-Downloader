@@ -145,7 +145,6 @@ public class MainFrame extends JFrame {
         leftPanel.setPreferredSize(new Dimension(300, 0));
 
         // Right Panel: Active Streams (Top) + Video Player (Center)
-        // We use a Vertical Split Pane
 
         // Active Streams Table
         String[] columnNames = { "Video", "Source Peer", "Progress %", "Status" };
@@ -263,7 +262,6 @@ public class MainFrame extends JFrame {
     }
 
     private void updateStatusLabel(String connectionStatus) {
-        // This would ideally pull from AppController state
         statusLabel.setText("Status: " + connectionStatus);
     }
 }

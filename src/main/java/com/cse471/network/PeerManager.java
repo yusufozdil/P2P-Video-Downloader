@@ -15,7 +15,6 @@ public class PeerManager {
     }
 
     public boolean addPeer(PeerInfo peer) {
-        // Only add if not exists or update if needed
         PeerInfo previous = peers.put(peer.getId(), peer);
         return previous == null;
     }
