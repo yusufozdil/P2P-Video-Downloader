@@ -39,3 +39,4 @@ bin/
 
 # Docker (Optional, if you want to ignore mapped data)
 data/
+*.mkv
