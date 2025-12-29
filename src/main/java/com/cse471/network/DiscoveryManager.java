@@ -173,21 +173,45 @@ public class DiscoveryManager {
     }
 
     private InetAddress getLocalIpAddress() {
+        // Method 1: Best Way - Connect to a public DNS (doesn't actually send packets)
+        // This asks the OS: "If I wanted to reach the internet, which IP would I use?"
+        try (DatagramSocket socket = new DatagramSocket()) {
+            socket.connect(InetAddress.getByName("8.8.8.8"), 10002);
+            InetAddress ip = socket.getLocalAddress();
+            if (ip != null && !ip.isAnyLocalAddress() && !ip.isLoopbackAddress()) {
+                return ip;
+            }
+        } catch (Exception e) {
+            // Ignore and try fallback
+            System.err.println("Method 1 failed: " + e.getMessage());
+        }
+
+        // Method 2: Fallback - Filtered Interface Enumeration
         try {
             java.util.Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
             while (interfaces.hasMoreElements()) {
                 NetworkInterface iface = interfaces.nextElement();
-                if (iface.isLoopback() || !iface.isUp())
+                String name = iface.getDisplayName().toLowerCase();
+
+                // Skip obviously wrong interfaces
+                if (iface.isLoopback() || !iface.isUp() ||
+                        name.contains("docker") ||
+                        name.contains("vbox") ||
+                        name.contains("vmnet") ||
+                        name.contains("virtual") ||
+                        name.contains("wsl")) {
                     continue;
+                }
 
                 for (InterfaceAddress addr : iface.getInterfaceAddresses()) {
                     InetAddress ip = addr.getAddress();
-                    if (ip instanceof Inet4Address) {
+                    if (ip instanceof Inet4Address && !ip.isLoopbackAddress()) {
                         return ip;
                     }
                 }
             }
         } catch (Exception e) {
+            e.printStackTrace();
         }
         return null;
     }
