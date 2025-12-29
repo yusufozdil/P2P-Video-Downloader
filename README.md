@@ -59,7 +59,7 @@ Before running the application, ensure you have the following installed:
 ### 1. GUI Mode (Desktop)
 To run the main application with the graphical interface:
 ```bash
-java -jar target/p2p-streaming-app-1.0-SNAPSHOT-shaded.jar
+java -jar target/p2p-streaming-app-1.0-SNAPSHOT.jar
 ```
 *   **Search**: Enter a keyword (e.g., "video") to search the network.
 *   **Play**: Double-click a file in the "Available Videos" list.
