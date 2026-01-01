@@ -7,11 +7,13 @@ public class PeerInfo {
     private String id;
     private InetAddress address;
     private int commandPort; // TCP port for file requests
+    private InetAddress relayAddress; // Gateway IP if peer is behind a different subnet
 
     public PeerInfo(String id, InetAddress address, int commandPort) {
         this.id = id;
         this.address = address;
         this.commandPort = commandPort;
+        this.relayAddress = null;
     }
 
     public String getId() {
@@ -26,10 +28,20 @@ public class PeerInfo {
         return commandPort;
     }
 
+    public InetAddress getRelayAddress() {
+        return relayAddress;
+    }
+
+    public void setRelayAddress(InetAddress relayAddress) {
+        this.relayAddress = relayAddress;
+    }
+
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (this == o)
+            return true;
+        if (o == null || getClass() != o.getClass())
+            return false;
         PeerInfo peerInfo = (PeerInfo) o;
         return Objects.equals(id, peerInfo.id);
     }
@@ -41,6 +53,10 @@ public class PeerInfo {
 
     @Override
     public String toString() {
-        return id + "@" + address.getHostAddress() + ":" + commandPort;
+        String base = id + "@" + address.getHostAddress() + ":" + commandPort;
+        if (relayAddress != null) {
+            return base + " (via " + relayAddress.getHostAddress() + ")";
+        }
+        return base;
     }
 }

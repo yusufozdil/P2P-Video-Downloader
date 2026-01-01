@@ -15,6 +15,14 @@ public class PeerManager {
     }
 
     public boolean addPeer(PeerInfo peer) {
+        PeerInfo existing = peers.get(peer.getId());
+        if (existing != null) {
+            // Priority Rule: Don't downgrade from Direct to Relayed
+            if (existing.getRelayAddress() == null && peer.getRelayAddress() != null) {
+                // Ignore the update if it forces a relay when we have direct
+                return false;
+            }
+        }
         PeerInfo previous = peers.put(peer.getId(), peer);
         return previous == null;
     }
@@ -30,5 +38,14 @@ public class PeerManager {
 
     public Collection<PeerInfo> getAllPeers() {
         return peers.values();
+    }
+
+    public PeerInfo getPeerByIp(java.net.InetAddress ip) {
+        for (PeerInfo peer : peers.values()) {
+            if (peer.getAddress().equals(ip)) {
+                return peer;
+            }
+        }
+        return null;
     }
 }

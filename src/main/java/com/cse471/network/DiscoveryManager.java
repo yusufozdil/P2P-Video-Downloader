@@ -3,7 +3,7 @@ package com.cse471.network;
 import java.io.IOException;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
-import java.util.UUID;
+
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class DiscoveryManager {
@@ -101,9 +101,23 @@ public class DiscoveryManager {
 
         // Register Peer using the IP from payload (True Origin)
         PeerInfo info = new PeerInfo(remoteId, remoteAddress, remotePort);
+
+        // Ignore packets from self (by IP check)
+        // This is critical to prevent "Self-Relay" detection where we receive our own
+        // forwarded packet
+        if (isLocalAddress(packet.getAddress()))
+            return;
+
+        // Check for Relay: If Packet Sender != Payload Origin, then Sender is a Relay
+        if (!packet.getAddress().equals(remoteAddress)) {
+            info.setRelayAddress(packet.getAddress());
+            // Only log if this is a NEW relay or different from what we know (rudimentary
+            // check logic could be here, but simpler to just reduce noise)
+        }
+
         if (PeerManager.getInstance().addPeer(info)) {
             System.out.println(
-                    "Discovered Peer: " + remoteId + " at " + remoteAddress.getHostAddress() + ":" + remotePort);
+                    "Discovered Peer: " + info); // Use toString() to show relay info
         }
 
         // Forwarding Logic (Limited Scope Flooding)
@@ -115,13 +129,7 @@ public class DiscoveryManager {
 
     private void sendDiscovery(DatagramSocket socket, int ttl) {
         try {
-            InetAddress myIp = getLocalIpAddress();
-            if (myIp == null)
-                return;
-
-            byte[] payload = buildPayload(ttl, myTcpPort, myIp, myPeerId);
-
-            // Broadcast Logic
+            // Broadcast Logic: Iterate all interfaces and send specific IP for each
             java.util.Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
             while (interfaces.hasMoreElements()) {
                 NetworkInterface networkInterface = interfaces.nextElement();
@@ -130,12 +138,19 @@ public class DiscoveryManager {
 
                 for (InterfaceAddress interfaceAddress : networkInterface.getInterfaceAddresses()) {
                     InetAddress broadcast = interfaceAddress.getBroadcast();
-                    if (broadcast != null) {
+                    InetAddress localIp = interfaceAddress.getAddress();
+
+                    // Only send if we have a broadcast address and it's IPv4 (simplification)
+                    if (broadcast != null && localIp instanceof Inet4Address) {
                         try {
+                            // Build payload SPECIFIC to this interface's IP
+                            byte[] payload = buildPayload(ttl, myTcpPort, localIp, myPeerId);
+
                             DatagramPacket packet = new DatagramPacket(payload, payload.length, broadcast,
                                     DISCOVERY_PORT);
                             socket.send(packet);
                         } catch (Exception ignored) {
+                            // Ignore send failures on specific interfaces
                         }
                     }
                 }
@@ -148,9 +163,26 @@ public class DiscoveryManager {
     private void forwardPacket(byte[] data, int length) {
         try (DatagramSocket socket = new DatagramSocket()) {
             socket.setBroadcast(true);
-            InetAddress broadcast = InetAddress.getByName("255.255.255.255");
-            DatagramPacket packet = new DatagramPacket(data, length, broadcast, DISCOVERY_PORT);
-            socket.send(packet);
+
+            // Better Flooding: Iterate interfaces like sendDiscovery to ensure it crosses
+            // subnets (Bridging)
+            java.util.Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
+            while (interfaces.hasMoreElements()) {
+                NetworkInterface networkInterface = interfaces.nextElement();
+                if (networkInterface.isLoopback() || !networkInterface.isUp())
+                    continue;
+
+                for (InterfaceAddress interfaceAddress : networkInterface.getInterfaceAddresses()) {
+                    InetAddress broadcast = interfaceAddress.getBroadcast();
+                    if (broadcast != null) {
+                        try {
+                            DatagramPacket packet = new DatagramPacket(data, length, broadcast, DISCOVERY_PORT);
+                            socket.send(packet);
+                        } catch (Exception ignored) {
+                        }
+                    }
+                }
+            }
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -172,47 +204,13 @@ public class DiscoveryManager {
         return payload;
     }
 
-    private InetAddress getLocalIpAddress() {
-        // Method 1: Best Way - Connect to a public DNS (doesn't actually send packets)
-        // This asks the OS: "If I wanted to reach the internet, which IP would I use?"
-        try (DatagramSocket socket = new DatagramSocket()) {
-            socket.connect(InetAddress.getByName("8.8.8.8"), 10002);
-            InetAddress ip = socket.getLocalAddress();
-            if (ip != null && !ip.isAnyLocalAddress() && !ip.isLoopbackAddress()) {
-                return ip;
-            }
-        } catch (Exception e) {
-            // Ignore and try fallback
-            System.err.println("Method 1 failed: " + e.getMessage());
-        }
-
-        // Method 2: Fallback - Filtered Interface Enumeration
+    private boolean isLocalAddress(InetAddress addr) {
+        if (addr.isAnyLocalAddress() || addr.isLoopbackAddress())
+            return true;
         try {
-            java.util.Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
-            while (interfaces.hasMoreElements()) {
-                NetworkInterface iface = interfaces.nextElement();
-                String name = iface.getDisplayName().toLowerCase();
-
-                // Skip obviously wrong interfaces
-                if (iface.isLoopback() || !iface.isUp() ||
-                        name.contains("docker") ||
-                        name.contains("vbox") ||
-                        name.contains("vmnet") ||
-                        name.contains("virtual") ||
-                        name.contains("wsl")) {
-                    continue;
-                }
-
-                for (InterfaceAddress addr : iface.getInterfaceAddresses()) {
-                    InetAddress ip = addr.getAddress();
-                    if (ip instanceof Inet4Address && !ip.isLoopbackAddress()) {
-                        return ip;
-                    }
-                }
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
+            return NetworkInterface.getByInetAddress(addr) != null;
+        } catch (SocketException e) {
+            return false;
         }
-        return null;
     }
 }

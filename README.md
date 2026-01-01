@@ -10,6 +10,10 @@ The application features a modern Swing GUI (FlatLaf), supports **multi-source d
 ## Features
 
 - **Decentralized Discovery**: Uses UDP broadcasting with a "Limited Scope Flooding" algorithm to find peers without a central server.
+- **Relay Mechanism**: Automatically bridges connections between peers on isolated subnets (e.g., VMs on Bridged vs Shared networks).
+  - Handles Discovery Forwarding across multiple interfaces.
+  - Smartly detects Relay gateways and prioritizes Direct connections.
+  - Transparently relays TCP file transfer streams.
 - **Multi-Source Streaming**: Identifies multiple peers holding the same file (via Hash) and downloads different chunks from them in parallel.
 - **Smart Video Player**: 
   - Integrated VLC Player (via VLCj) for robust codec support.
