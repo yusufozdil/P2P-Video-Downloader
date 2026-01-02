@@ -3,27 +3,30 @@ services:
   peer1:
     build: .
     networks:
-      - p2p-net
+      - net_a
     volumes:
       - ./data/peer1:/data
-    command: [ "java", "-jar", "app.jar", "--headless" ]
+    command: [ "java", "-jar", "app.jar", "--bot" ]
 
   peer2:
     build: .
     networks:
-      - p2p-net
+      - net_b
     volumes:
       - ./data/peer2:/data
     command: [ "java", "-jar", "app.jar", "--headless" ]
 
-  peer3:
+  relay:
     build: .
     networks:
-      - p2p-net
+      - net_a
+      - net_b
     volumes:
-      - ./data/peer3:/data
-    command: [ "java", "-jar", "app.jar", "--bot" ]
+      - ./data/relay:/data
+    command: [ "java", "-jar", "app.jar", "--headless" ]
 
 networks:
-  p2p-net:
+  net_a:
+    driver: bridge
+  net_b:
     driver: bridge

@@ -6,7 +6,7 @@ import java.util.Random;
 
 public class BotManager extends Thread {
     private final AppController controller;
-    private final String[] keywords = { "video", "movie", "demo" };
+    private final String[] keywords = { "video" };
     private boolean running = true;
     private final Random random = new Random();
 
