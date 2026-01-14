@@ -9,6 +9,7 @@ import java.awt.*;
 public class StreamPlayer extends JPanel {
     private CallbackMediaPlayerComponent mediaPlayerComponent;
 
+    // Yapıcı Metot: VLC motorunu (NativeDiscovery) bulur ve Swing bileşenine gömer.
     public StreamPlayer() {
         setLayout(new BorderLayout());
         setBackground(Color.BLACK);
@@ -17,8 +18,6 @@ public class StreamPlayer extends JPanel {
             // Find VLC
             new NativeDiscovery().discover();
 
-            // Use CallbackMediaPlayerComponent for Software Rendering
-            // This bypasses hardware surface issues on macOS
             mediaPlayerComponent = new CallbackMediaPlayerComponent();
             add(mediaPlayerComponent, BorderLayout.CENTER);
 
@@ -72,6 +71,7 @@ public class StreamPlayer extends JPanel {
 
     private String currentFilePath;
 
+    // Videoyu Oynat: Verilen dosya yolundaki videoyu VLC motoru ile oynatır.
     public void play(String filePath) {
         this.currentFilePath = filePath;
         System.out.println("StreamPlayer (Software): play() called for " + filePath);

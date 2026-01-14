@@ -9,7 +9,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class DiscoveryManager {
     private static final int DISCOVERY_PORT = 50000;
     private static final int DISCOVERY_INTERVAL_MS = 5000;
-    private static final int INITIAL_TTL = 3; // Hop limit
+    private static final int INITIAL_TTL = 0; // Hop limit (0 = No Forwarding, Single Subnet)
 
     private final String myPeerId;
     private final int myTcpPort;
@@ -17,11 +17,13 @@ public class DiscoveryManager {
     private Thread listenerThread;
     private Thread announcerThread;
 
+    // Yapıcı Metot: Peer ID ve TCP Port bilgisini alır.
     public DiscoveryManager(String myPeerId, int myTcpPort) {
         this.myPeerId = myPeerId;
         this.myTcpPort = myTcpPort;
     }
 
+    // Servisi Başlatır: Dinleyici ve Duyurucu thread'lerini oluşturup çalıştırır.
     public void start() {
         if (running.compareAndSet(false, true)) {
             listenerThread = new Thread(this::listenLoop, "Discovery-Listener");
@@ -32,6 +34,7 @@ public class DiscoveryManager {
         }
     }
 
+    // Servisi Durdurur: Çalışan thread'leri kapatır.
     public void stop() {
         running.set(false);
         if (listenerThread != null)
@@ -40,6 +43,7 @@ public class DiscoveryManager {
             announcerThread.interrupt();
     }
 
+    // Duyurucu Döngüsü: Her 5 saniyede bir "Ben Buradayım" mesajı yayınlar.
     private void announceLoop() {
         try (DatagramSocket socket = new DatagramSocket()) {
             socket.setBroadcast(true);
@@ -54,6 +58,8 @@ public class DiscoveryManager {
         }
     }
 
+    // Dinleyici Döngüsü: 50000 portunu dinler ve gelen paketleri işlenmek üzere
+    // processPacket'e yollar.
     private void listenLoop() {
         byte[] buffer = new byte[1024];
         try (DatagramSocket socket = new DatagramSocket(null)) {
@@ -71,6 +77,8 @@ public class DiscoveryManager {
         }
     }
 
+    // Paketi İşler: Gelen paketin kimden geldiğini, Relay olup olmadığını anlar ve
+    // listeye ekler.
     private void processPacket(DatagramPacket packet, DatagramSocket serverSocket) {
         byte[] data = packet.getData();
         int length = packet.getLength();
@@ -90,7 +98,7 @@ public class DiscoveryManager {
         try {
             remoteAddress = InetAddress.getByAddress(ipBytes);
         } catch (UnknownHostException e) {
-            return; // Invalid IP
+            return;
         }
 
         String remoteId = new String(data, 8, length - 8, StandardCharsets.UTF_8);
@@ -111,8 +119,6 @@ public class DiscoveryManager {
         // Check for Relay: If Packet Sender != Payload Origin, then Sender is a Relay
         if (!packet.getAddress().equals(remoteAddress)) {
             info.setRelayAddress(packet.getAddress());
-            // Only log if this is a NEW relay or different from what we know (rudimentary
-            // check logic could be here, but simpler to just reduce noise)
         }
 
         if (PeerManager.getInstance().addPeer(info)) {
@@ -127,6 +133,8 @@ public class DiscoveryManager {
         }
     }
 
+    // Keşif Paketi Gönder: Cihazın tüm ağ arayüzlerini (Wi-Fi, Ethernet) dolaşıp
+    // Broadcast yapar.
     private void sendDiscovery(DatagramSocket socket, int ttl) {
         try {
             // Broadcast Logic: Iterate all interfaces and send specific IP for each
@@ -160,12 +168,14 @@ public class DiscoveryManager {
         }
     }
 
+    // Paketi İlet (Forward): Eğer TTL süresi bitmediyse, paketi başkalarının da
+    // duyması için tekrar yayınlar.
     private void forwardPacket(byte[] data, int length) {
         try (DatagramSocket socket = new DatagramSocket()) {
             socket.setBroadcast(true);
 
             // Better Flooding: Iterate interfaces like sendDiscovery to ensure it crosses
-            // subnets (Bridging)
+            // subnets
             java.util.Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
             while (interfaces.hasMoreElements()) {
                 NetworkInterface networkInterface = interfaces.nextElement();
@@ -188,6 +198,8 @@ public class DiscoveryManager {
         }
     }
 
+    // Paket İçeriği Oluştur: Flags, TTL, Port, IP ve PeerID bilgilerini byte
+    // dizisine çevirir.
     private byte[] buildPayload(int ttl, int port, InetAddress ip, String id) {
         byte[] idBytes = id.getBytes(StandardCharsets.UTF_8);
         byte[] ipBytes = ip.getAddress(); // 4 bytes for IPv4
@@ -204,6 +216,8 @@ public class DiscoveryManager {
         return payload;
     }
 
+    // Yerel Adres Kontrolü: Verilen IP adresinin bu cihaza ait olup olmadığını
+    // kontrol eder.
     private boolean isLocalAddress(InetAddress addr) {
         if (addr.isAnyLocalAddress() || addr.isLoopbackAddress())
             return true;

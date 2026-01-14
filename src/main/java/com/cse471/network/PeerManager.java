@@ -10,10 +10,13 @@ public class PeerManager {
     private PeerManager() {
     }
 
+    // Singleton Erişimi: Uygulama genelinde tek bir PeerManager örneği döndürür.
     public static PeerManager getInstance() {
         return instance;
     }
 
+    // Peer Ekle: Yeni bir Peer keşfedildiğinde listeye ekler. Doğrudan bağlantı
+    // varsa Relay olanı yoksayar.
     public boolean addPeer(PeerInfo peer) {
         PeerInfo existing = peers.get(peer.getId());
         if (existing != null) {
@@ -27,19 +30,23 @@ public class PeerManager {
         return previous == null;
     }
 
+    // Peer Sil: Bağlantısı kopan veya kapanan Peer'ı listeden çıkarır.
     public void removePeer(String peerId) {
         peers.remove(peerId);
         System.out.println("Peer Removed: " + peerId);
     }
 
+    // Peer Getir: ID'si verilen Peer'ın detaylarını döner.
     public PeerInfo getPeer(String peerId) {
         return peers.get(peerId);
     }
 
+    // Tüm Peerlar: Aktif olan tüm Peerların listesini döner.
     public Collection<PeerInfo> getAllPeers() {
         return peers.values();
     }
 
+    // IP ile Bul: IP adresi bilinen bir Peer'ın ID ve Port bilgilerini bulur.
     public PeerInfo getPeerByIp(java.net.InetAddress ip) {
         for (PeerInfo peer : peers.values()) {
             if (peer.getAddress().equals(ip)) {

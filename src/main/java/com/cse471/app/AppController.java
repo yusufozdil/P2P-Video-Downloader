@@ -25,6 +25,7 @@ public class AppController {
         this.tcpPort = 0;
     }
 
+    // Singleton Erişimi: Uygulama kontrolcüsünün tekil örneğini döner.
     public static synchronized AppController getInstance() {
         if (instance == null) {
             instance = new AppController();
@@ -32,6 +33,8 @@ public class AppController {
         return instance;
     }
 
+    // Başlatma: GUI ve Dosya Yöneticisini hazırlar. Headless modda varsayılan
+    // klasörleri ayarlar.
     public void initialize(MainFrame frame) {
         this.mainFrame = frame;
         this.fileManager = new FileManager();
@@ -47,6 +50,8 @@ public class AppController {
         }
     }
 
+    // Ağı Başlat: Rastgele bir port seçip Discovery ve Transfer servislerini ayağa
+    // kaldırır.
     public void startNetwork() {
         try {
             if (transferManager == null) {
@@ -71,6 +76,7 @@ public class AppController {
         }
     }
 
+    // Ağı Durdur: Tüm servisleri kapatır ve kaynakları serbest bırakır.
     public void stopNetwork() {
         if (discoveryManager != null)
             discoveryManager.stop();
@@ -97,7 +103,14 @@ public class AppController {
         }
     }
 
+    // Dosya Ara (Basit): Verilen kelimeyi hem yerelde hem ağda arar.
     public void searchFiles(String query) {
+        searchFiles(query, "");
+    }
+
+    // Dosya Ara (Gelişmiş): Hariç tutma filtresi ile arama yapar ve sonucu GUI'ye
+    // yansıtır.
+    public void searchFiles(String query, String exclusionPattern) {
         if (transferManager == null)
             return;
 
@@ -107,7 +120,8 @@ public class AppController {
             // 1. Local Files
             fileManager.getLocalFileList().stream()
                     .filter(f -> f.getFileName().toLowerCase().contains(query.toLowerCase()))
-                    .forEach(f -> uniqueFiles.put(f.getHash(), f)); // Key by Hash
+                    .filter(f -> !matchesExclusion(f.getFileName(), exclusionPattern)) // Exclusion Filter
+                    .forEach(f -> uniqueFiles.put(f.getHash(), f));
 
             // 2. Remote Files
             for (com.cse471.network.PeerInfo peer : com.cse471.network.PeerManager.getInstance().getAllPeers()) {
@@ -115,7 +129,8 @@ public class AppController {
                 if (remoteFiles != null) {
                     remoteFiles.stream()
                             .filter(f -> f.getFileName().toLowerCase().contains(query.toLowerCase()))
-                            .forEach(f -> uniqueFiles.putIfAbsent(f.getHash(), f)); // Only add if not exists
+                            .filter(f -> !matchesExclusion(f.getFileName(), exclusionPattern)) // Exclusion Filter
+                            .forEach(f -> uniqueFiles.putIfAbsent(f.getHash(), f));
                 }
             }
 
@@ -132,6 +147,7 @@ public class AppController {
 
     }
 
+    // Bloklayan Arama: Sonuçları liste olarak döner (Bot modu için).
     public java.util.List<FileInfo> searchFilesBlocking(String query) {
         if (transferManager == null)
             return new java.util.ArrayList<>();
@@ -155,10 +171,33 @@ public class AppController {
         return new java.util.ArrayList<>(uniqueFiles.values());
     }
 
+    // Helper for Exclusion Logic
+    private boolean matchesExclusion(String filename, String pattern) {
+        if (pattern == null || pattern.trim().isEmpty())
+            return false;
+
+        String[] patterns = pattern.split(";");
+        for (String p : patterns) {
+            p = p.trim();
+            if (p.isEmpty())
+                continue;
+
+            // Convert glob patterns to regex
+            String regex = p.replace(".", "\\.").replace("*", ".*").replace("?", ".");
+            if (filename.matches("(?i)" + regex)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Video Oynat: İndirmeyi başlatır ve oynatma isteği yollar.
     public void playVideo(FileInfo fileInfo) {
         startDownload(fileInfo, true);
     }
 
+    // İndirmeyi Başlat: Dosya kaynaklarını bulur, yük dengeleme yapar ve dinamik
+    // bufferlama ile indirir.
     public void startDownload(FileInfo fileInfo, boolean playVideo) {
         if (transferManager == null || fileManager.getBufferFolder() == null) {
             String msg = "Network not started or Buffer Folder not set.";
@@ -207,6 +246,11 @@ public class AppController {
                 int bufferNeeded = 4;
                 long startTime = System.currentTimeMillis();
 
+                // Dynamic Buffering Variables
+                double avgLatency = 0;
+                int packetLossCount = 0;
+                final double ALPHA = 0.2; // Moving Average Weight
+
                 for (int i = 0; i < totalChunks; i++) {
                     long chunkStart = System.currentTimeMillis();
 
@@ -216,9 +260,26 @@ public class AppController {
                     byte[] data = transferManager.requestChunk(source, fileInfo.getHash(), i);
                     long duration = System.currentTimeMillis() - chunkStart;
 
-                    // Dynamic Adjustment
-                    if (duration > 500) {
-                        bufferNeeded++; // Network slow, buffer more
+                    // Dynamic Buffering Logic
+                    if (data != null) {
+                        // Update Exponential Moving Average of Latency
+                        if (i == 0)
+                            avgLatency = duration;
+                        else
+                            avgLatency = (ALPHA * duration) + ((1.0 - ALPHA) * avgLatency);
+
+                        // If network is slow (Latency > 500ms), increase buffer
+                        if (avgLatency > 500) {
+                            bufferNeeded = Math.min(totalChunks, bufferNeeded + 1);
+                            System.out.println("Network Slow (Lat: " + (int) avgLatency + "ms)! Increasing Buffer to: "
+                                    + bufferNeeded);
+                        }
+                    } else {
+                        // Packet Loss Detected
+                        packetLossCount++;
+                        // Penalize: Significantly increase buffer requirements on loss
+                        bufferNeeded = Math.min(totalChunks, bufferNeeded + 2);
+                        System.err.println("Packet Loss Detected! Increasing Buffer to: " + bufferNeeded);
                     }
 
                     if (data != null && data.length > 0) {

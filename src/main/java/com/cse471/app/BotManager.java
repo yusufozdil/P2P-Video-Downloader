@@ -6,14 +6,17 @@ import java.util.Random;
 
 public class BotManager extends Thread {
     private final AppController controller;
-    private final String[] keywords = { "video" };
+    private final String[] keywords = { "aaaaaa", "Lights Off", "Rick-Roll", "Sax Gandalf" };
     private boolean running = true;
     private final Random random = new Random();
 
+    // Yapıcı Metot: Botu kontrol etmesi için ana kontrolcüyü (AppController)
+    // bağlar.
     public BotManager(AppController controller) {
         this.controller = controller;
     }
 
+    // Çalışma Döngüsü: Botun sonsuz yaşam döngüsüdür (Uyu -> Ara -> İndir).
     @Override
     public void run() {
         System.out.println("Bot Mode Activated! I will search and download files autonomously.");

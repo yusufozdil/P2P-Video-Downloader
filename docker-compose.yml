@@ -2,31 +2,34 @@ version: '3'
 services:
   peer1:
     build: .
+    cap_add:
+      - NET_ADMIN
     networks:
-      - net_a
+      - p2p_net
     volumes:
       - ./data/peer1:/data
-    command: [ "java", "-jar", "app.jar", "--bot" ]
+    command: [ "java", "-jar", "app.jar", "--headless" ]
 
   peer2:
     build: .
+    cap_add:
+      - NET_ADMIN
     networks:
-      - net_b
+      - p2p_net
     volumes:
       - ./data/peer2:/data
     command: [ "java", "-jar", "app.jar", "--headless" ]
 
-  relay:
+  peer3:
     build: .
+    cap_add:
+      - NET_ADMIN
     networks:
-      - net_a
-      - net_b
+      - p2p_net
     volumes:
-      - ./data/relay:/data
-    command: [ "java", "-jar", "app.jar", "--headless" ]
+      - ./data/peer3:/data
+    command: [ "java", "-jar", "app.jar", "--bot" ]
 
 networks:
-  net_a:
-    driver: bridge
-  net_b:
+  p2p_net:
     driver: bridge

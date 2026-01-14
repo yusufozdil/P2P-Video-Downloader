@@ -27,6 +27,7 @@ public class MainFrame extends JFrame {
     // Theme
     private boolean isDarkTheme = true;
 
+    // Yapıcı Metot: Arayüz bileşenlerini oluşturur ve temayı yükler.
     public MainFrame() {
         initUI();
     }
@@ -35,8 +36,9 @@ public class MainFrame extends JFrame {
         return streamPlayer;
     }
 
+    // Arayüz Başlatma: Pencere, Menüler, Tablolar ve Düzen (Layout) ayarlarını
+    // yapar.
     private void initUI() {
-        // Apply Initial Theme
         try {
             UIManager.setLookAndFeel(new FlatDarkLaf());
         } catch (Exception ex) {
@@ -96,7 +98,7 @@ public class MainFrame extends JFrame {
         // About Action
         aboutItem.addActionListener(e -> {
             JOptionPane.showMessageDialog(this,
-                    "Developer: Yusuf Özdil\nContact: yusuf.ozdil@std.yeditepe.edu.tr",
+                    "Developer: Yusuf Özdil\nContact: yusuf.ozdil@std.yeditepe.edu.tr\\nBetter Call Yusuf",
                     "About Developer",
                     JOptionPane.INFORMATION_MESSAGE);
         });
@@ -123,14 +125,27 @@ public class MainFrame extends JFrame {
         gbc.insets = new Insets(5, 5, 5, 5);
 
         searchField = new JTextField();
+        // Exclusion Filter Field
+        JTextField exclusionField = new JTextField();
+        exclusionField.setToolTipText("Exclusion Filter (e.g. *.txt; temp*)");
+        exclusionField.putClientProperty("JTextField.placeholderText", "Exclude (e.g. *.mkv)"); // FlatLaf placeholder
+
         searchButton = new JButton("Search");
 
+        // Search Field (Weight 1.0)
         gbc.gridx = 0;
         gbc.gridy = 0;
-        gbc.weightx = 1.0;
+        gbc.weightx = 0.7;
         searchPanel.add(searchField, gbc);
 
+        // Exclusion Field (Weight 0.3)
         gbc.gridx = 1;
+        gbc.gridy = 0;
+        gbc.weightx = 0.3;
+        searchPanel.add(exclusionField, gbc);
+
+        // Search Button
+        gbc.gridx = 2;
         gbc.gridy = 0;
         gbc.weightx = 0.0;
         searchPanel.add(searchButton, gbc);
@@ -217,13 +232,21 @@ public class MainFrame extends JFrame {
         // Search Action
         searchButton.addActionListener(e -> {
             String q = searchField.getText().trim();
+            String exclusion = "";
+            for (Component c : searchPanel.getComponents()) {
+                if (c instanceof JTextField && c != searchField) {
+                    exclusion = ((JTextField) c).getText().trim();
+                    break;
+                }
+            }
             if (!q.isEmpty()) {
-                com.cse471.app.AppController.getInstance().searchFiles(q);
-                log("Searching for: " + q);
+                com.cse471.app.AppController.getInstance().searchFiles(q, exclusion);
+                log("Searching for: " + q + (exclusion.isEmpty() ? "" : " [Excluding: " + exclusion + "]"));
             }
         });
     }
 
+    // Sonuç Güncelle: Arama sonucunda dönen dosya listesini ekrana basar.
     public void updateAvailableFiles(java.util.List<FileInfo> files) {
         availableListModel.clear();
         for (FileInfo f : files) {
@@ -249,13 +272,15 @@ public class MainFrame extends JFrame {
     }
 
     // Updated for structured table data
+    // İndirme Tablosunu Güncelle: İndirilen dosyanın kaynak, yüzde ve durum
+    // bilgisini tabloya ekler.
     public void addActiveStream(String video, String source, String progress, String status) {
         activeStreamsModel.addRow(new Object[] { video, source, progress, status });
-        // Scroll to the bottom
         activeStreamsTable
                 .scrollRectToVisible(activeStreamsTable.getCellRect(activeStreamsTable.getRowCount() - 1, 0, true));
     }
 
+    // Log Yaz: Kullanıcıya bilgi vermek için alt kısımdaki konsola mesaj yazar.
     public void log(String message) {
         eventLog.append(message + "\n");
         eventLog.setCaretPosition(eventLog.getDocument().getLength());

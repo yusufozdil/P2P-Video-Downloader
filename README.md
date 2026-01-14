@@ -24,6 +24,9 @@ The application features a modern Swing GUI (FlatLaf), supports **multi-source d
   - **Real-time Stats**: Active Streams table showing source peers, progress %, and status.
   - **Event Log**: Detailed logging of network events within the UI.
 - **Bot Mode**: Headless operation support (`--bot`) for running autonomous peers in Docker containers.
+- **Bonus Features**:
+  - **Exclusion Filters**: Filter search results by filename patterns (e.g., `*.tmp; ~*`) to ignore unwanted files.
+  - **Dynamic Buffering**: Automatically adjusts video buffer size based on network latency and packet loss to prevent playback freezing.
 
 ---
 

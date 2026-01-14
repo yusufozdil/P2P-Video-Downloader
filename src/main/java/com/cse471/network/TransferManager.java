@@ -17,11 +17,13 @@ public class TransferManager {
     private Thread serverThread;
     private boolean running = false;
 
+    // Yapıcı Metot: Dosya yöneticisini ve hangi portta sunucu açılacağını belirler.
     public TransferManager(FileManager fileManager, int port) {
         this.fileManager = fileManager;
         this.port = port;
     }
 
+    // Sunucuyu Başlatır: Arka planda gelen TCP isteklerini dinlemeye başlar.
     public void startServer() {
         running = true;
         serverThread = new Thread(this::listenLoop, "Transfer-Server");
@@ -29,6 +31,7 @@ public class TransferManager {
         System.out.println("Transfer Server listening on TCP port " + port);
     }
 
+    // Sunucuyu Durdurur: Dinlemeyi keser ve tüm aktif işlemleri kapatır.
     public void stop() {
         running = false;
         try {
@@ -37,6 +40,8 @@ public class TransferManager {
         }
     }
 
+    // Dinleme Döngüsü: Sürekli olarak yeni bağlantı kabul eder (accept) ve işlenmek
+    // üzere threade atar.
     private void listenLoop() {
         try (ServerSocket serverSocket = new ServerSocket(port, 50, InetAddress.getByName("0.0.0.0"))) {
             while (running) {
@@ -48,6 +53,8 @@ public class TransferManager {
         }
     }
 
+    // İstemci Yöneticisi: Gelen bağlantının ne istediğini (Dosya Listesi, Chunk,
+    // Relay) anlar ve yönlendirir.
     private void handleClient(Socket socket) {
         try (DataInputStream in = new DataInputStream(socket.getInputStream());
                 DataOutputStream out = new DataOutputStream(socket.getOutputStream())) {
@@ -71,6 +78,8 @@ public class TransferManager {
         }
     }
 
+    // Relay (Köprü) İsteği: Bu sunucuyu aracı olarak kullanıp başka bir hedefle
+    // bağlantı kurar.
     private void handleRelayRequest(DataInputStream in, DataOutputStream out) {
         Socket targetSocket = null;
         try {
@@ -94,7 +103,6 @@ public class TransferManager {
             out.flush();
             System.out.println("DEBUG: Sent OK to client. Starting bridge.");
 
-            // Bridge Connections
             // Bridge Connections
             Socket finalTargetSocket = targetSocket;
             java.util.concurrent.Future<?> f1 = executor.submit(() -> {
@@ -137,6 +145,8 @@ public class TransferManager {
         }
     }
 
+    // Akış Kopyalayıcı: Bir yerden gelen veriyi (InputStream) diğer tarafa
+    // (OutputStream) aynen aktarır. Relay için kullanılır.
     private void copyStream(InputStream in, OutputStream out) {
         // Helper to pipe streams
         try {
@@ -151,6 +161,8 @@ public class TransferManager {
         }
     }
 
+    // Dosya Listesi Gönder: Paylaşımdaki dosyaların isim, boyut ve hash bilgilerini
+    // karşı tarafa yollar.
     private void sendFileList(DataOutputStream out) throws IOException {
         List<FileInfo> files = fileManager.getLocalFileList();
         out.writeInt(files.size());
@@ -162,6 +174,8 @@ public class TransferManager {
         out.flush();
     }
 
+    // Chunk (Parça) Gönder: İstenen dosyanın belirli bir parçasını okur ve karşı
+    // tarafa gönderir.
     private void handleChunkRequest(DataInputStream in, DataOutputStream out) throws IOException {
         String hash = in.readUTF();
         int chunkIndex = in.readInt();
@@ -170,7 +184,7 @@ public class TransferManager {
         try {
             data = fileManager.getChunk(hash, chunkIndex);
         } catch (Exception e) {
-            data = new byte[0]; // Not found or error
+            data = new byte[0];
         }
 
         out.writeInt(data.length);
@@ -182,6 +196,8 @@ public class TransferManager {
 
     // --- Client Side Methods ---
 
+    // [İstemci] Dosya Listesi İste: Hedef Peer'a bağlanıp paylaştığı dosyaları
+    // sorar.
     public List<FileInfo> requestFileList(PeerInfo peer) {
         List<FileInfo> result = new ArrayList<>();
 
@@ -232,6 +248,8 @@ public class TransferManager {
         return result;
     }
 
+    // [İstemci] Chunk İste: Hedef Peer'a bağlanıp belirli bir dosyanın belirli bir
+    // parçasını ister.
     public byte[] requestChunk(PeerInfo peer, String fileHash, int chunkIndex) {
         InetAddress targetIp = peer.getRelayAddress() != null ? peer.getRelayAddress() : peer.getAddress();
         int targetPort = peer.getCommandPort();
